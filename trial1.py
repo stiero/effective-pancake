@@ -112,12 +112,6 @@ entities = data.get_entities()
 entities_start_stop = df.entities.apply(lambda x: [(w['start'], w['stop']) for w in x])
 
 
-word_ent = []
-    
-for i, sent in enumerate(sentences):
-    for word, ent in zip(sent, entities[i]):
-        word_ent.append((word, ent))
-        
 
 
 
@@ -127,6 +121,7 @@ entities = list(map(lambda x: ['O' for word in x], sentences))
 
 #entities = []
 
+faulty_points = []
 
 
 for i, sent in enumerate(sentences):
@@ -137,34 +132,51 @@ for i, sent in enumerate(sentences):
                 
         entity = ent['entity']
         
+        text = re.split(" |(-)|'|(:)|(,)", text)
+                        
+        if not any(set(sentences[i][start:stop+1]) & set(text)):
+            faulty_points.append(i)
+            break
+            
+        len_entity = len(entities[i][start:stop+1])
+        newlist = [entity] * len_entity
+        entities[i][start:stop+1] = newlist
+            
+        
+
+
+
+for i in faulty_points:
+    
+    for ent in df.iloc[i].entities:
+        
+        start = ent['start'] - 1
+        stop = ent['stop'] - 1
+        
+        entity = ent['entity']
+        
+        sentences[i][start:stop+1]
+        
         len_entity = len(entities[i][start:stop+1])
         
-        
-                                
-                
-        #entities[i][start:stop+1] = [entity for i in range(len(entities[i][start:stop+1]))]
-        
-        if sentences[i][start:stop+1] == text.split():
-        
-            entities[i][start:stop+1] = [entity * len_entity]
-            
-        
-        else:
-            print("Mistake")
-        
-        
-        
-        try:
-           
-            entities[i][start:stop+1] = [entity]
-            
-        except IndexError:
-            start -= 1
-            stop -= 1
-            entities[i][start:stop+1] = entity
-        
-            print(i, sent, start, stop, entity)
+        newlist = [entity] * len_entity
+        entities[i][start:stop+1] = newlist
+    
+    
+    
 
+
+sent_ents = []
+    
+for i, sent in enumerate(sentences):
+    
+    word_ent = []
+    for word, ent in zip(sent, entities[i]):
+        word_ent.append((word, ent))
+    
+    sent_ents.append(word_ent)
+        
+   
 
 
 
@@ -223,15 +235,16 @@ def sent2features(sent):
     return [word2features(sent, i) for i in range(len(sent))]
 
 def sent2labels(sent):
-    return [label for token, postag, label in sent]
+    return [label for token, label in sent]
 
 def sent2tokens(sent):
-    return [token for token, postag, label in sent]
+    return [token for token, label in sent]
 
 
 
+X = [sent2features(s) for s in sent_ents]
 
-
+y = [sent2labels(s) for s in sent_ents]
 
 #from nltk.tokenize import RegexpTokenizer
 #
