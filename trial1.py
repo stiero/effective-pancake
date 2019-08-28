@@ -240,11 +240,54 @@ def sent2labels(sent):
 def sent2tokens(sent):
     return [token for token, label in sent]
 
+train_index = df[df.training == True].index.tolist()
+test_index = df[df.training == False].index.tolist()
 
 
-X = [sent2features(s) for s in sent_ents]
+sent_ents_train = [sent_ents[i] for i in train_index]
 
-y = [sent2labels(s) for s in sent_ents]
+sent_ents_test = [sent_ents[i] for i in test_index]
+
+
+X_train = [sent2features(s) for s in sent_ents_train]
+y_train = [sent2labels(s) for s in sent_ents_train]
+
+
+X_test = [sent2features(s) for s in sent_ents_test]
+y_test = [sent2labels(s) for s in sent_ents_test]
+
+
+
+from sklearn_crfsuite import CRF
+
+
+crf = CRF(algorithm='lbfgs',
+          c1=0.1,
+          c2=0.1,
+          max_iterations=100,
+          all_possible_transitions=True)
+
+
+
+from sklearn.model_selection import cross_val_predict
+from sklearn_crfsuite.metrics import flat_classification_report
+
+
+crf.fit(X_train, y_train)
+
+
+pred = crf.predict(X_test)
+
+#pred = cross_val_predict(estimator=crf, X=X, y=y, cv=5)
+
+report = flat_classification_report(y_pred=pred, y_true=y_test)
+
+print(report)
+
+
+
+for i, j in zip(pred, test_index):
+    print(i, "\n", sentences[j], "\n"*2)
 
 #from nltk.tokenize import RegexpTokenizer
 #
