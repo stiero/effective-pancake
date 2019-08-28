@@ -86,13 +86,13 @@ class DataGetter():
                 
                 entity = ent['entity']
                                 
-                try:
-                    self.entity_sequence[i][start:stop+1] = [entity for i in range(len(self.entity_sequence[i][start:stop+1]))]
-                except IndexError:
-                    start -= 1
-                    stop -= 1
-                    
-                    self.entity_sequence[i][start:stop+1] = [entity for i in len(self.entity_sequence[i][start:stop+1])]
+                
+                self.entity_sequence[i][start:stop+1] = [entity for i in range(len(self.entity_sequence[i][start:stop+1]))]
+#                except IndexError:
+#                    start -= 1
+#                    stop -= 1
+#                    
+#                    self.entity_sequence[i][start:stop+1] = [entity for i in len(self.entity_sequence[i][start:stop+1])]
 
 
         return self.entity_sequence
@@ -107,12 +107,126 @@ unique_entities = data.get_unique_entities()
 
 sentences = data.clean_and_tokenise()
 
+entities = data.get_entities()
+
+entities_start_stop = df.entities.apply(lambda x: [(w['start'], w['stop']) for w in x])
 
 
-
- 
+word_ent = []
     
-    
+for i, sent in enumerate(sentences):
+    for word, ent in zip(sent, entities[i]):
+        word_ent.append((word, ent))
+        
+
+
+
+
+
+entities = list(map(lambda x: ['O' for word in x], sentences))
+
+#entities = []
+
+
+
+for i, sent in enumerate(sentences):
+    for ent in df.iloc[i].entities:
+        start = ent['start']
+        stop = ent['stop']
+        text = ent['text']
+                
+        entity = ent['entity']
+        
+        len_entity = len(entities[i][start:stop+1])
+        
+        
+                                
+                
+        #entities[i][start:stop+1] = [entity for i in range(len(entities[i][start:stop+1]))]
+        
+        if sentences[i][start:stop+1] == text.split():
+        
+            entities[i][start:stop+1] = [entity * len_entity]
+            
+        
+        else:
+            print("Mistake")
+        
+        
+        
+        try:
+           
+            entities[i][start:stop+1] = [entity]
+            
+        except IndexError:
+            start -= 1
+            stop -= 1
+            entities[i][start:stop+1] = entity
+        
+            print(i, sent, start, stop, entity)
+
+
+
+
+
+
+
+
+
+
+
+def word2features(sent, i):
+    word = sent[i][0]
+    postag = sent[i][1]
+
+    features = {
+        'bias': 1.0,
+        'word.lower()': word.lower(),
+        'word[-3:]': word[-3:],
+        'word[-2:]': word[-2:],
+        'word.isupper()': word.isupper(),
+        'word.istitle()': word.istitle(),
+        'word.isdigit()': word.isdigit(),
+        'postag': postag,
+        'postag[:2]': postag[:2],
+    }
+    if i > 0:
+        word1 = sent[i-1][0]
+        postag1 = sent[i-1][1]
+        features.update({
+            '-1:word.lower()': word1.lower(),
+            '-1:word.istitle()': word1.istitle(),
+            '-1:word.isupper()': word1.isupper(),
+            '-1:postag': postag1,
+            '-1:postag[:2]': postag1[:2],
+        })
+    else:
+        features['BOS'] = True
+
+    if i < len(sent)-1:
+        word1 = sent[i+1][0]
+        postag1 = sent[i+1][1]
+        features.update({
+            '+1:word.lower()': word1.lower(),
+            '+1:word.istitle()': word1.istitle(),
+            '+1:word.isupper()': word1.isupper(),
+            '+1:postag': postag1,
+            '+1:postag[:2]': postag1[:2],
+        })
+    else:
+        features['EOS'] = True
+
+    return features
+
+
+def sent2features(sent):
+    return [word2features(sent, i) for i in range(len(sent))]
+
+def sent2labels(sent):
+    return [label for token, postag, label in sent]
+
+def sent2tokens(sent):
+    return [token for token, postag, label in sent]
 
 
 
