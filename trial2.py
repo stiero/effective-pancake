@@ -78,3 +78,52 @@ report = flat_classification_report(y_pred=pred, y_true=y_test)
 print(report)
 
 flat_f1_score(y_test, pred, average='weighted')
+
+
+
+
+
+
+
+
+sample_intent = "Can you tell me the quickest way to go from Bangalore to London?"
+
+
+sample_intent = re.sub('[.!]+', "", sample_intent)
+
+sample_intent = re.split(" |(-)|'|(:)|(,)|(\?)", sample_intent)
+
+
+sample_intent = [word for word in sample_intent if word != None]
+
+
+#X_sample_intent = np.zeros((1, max_len))
+
+X_sample_intent = np.zeros((1, len(sample_intent)))
+
+
+for i, word in enumerate(sample_intent):
+    
+    if word not in word2idx.keys():
+        continue
+    
+    X_sample_intent[:,i] = word2idx[word]
+    
+
+X_sample_intent = pad_sequences(maxlen=max_len, sequences=X_sample_intent, 
+                               padding="post", value=n_words - 1)    
+
+
+pred_sample_intent = model.predict(X_sample_intent)
+
+np.argmax(pred_sample_intent)
+
+
+
+
+
+
+
+
+
+sample_intent = [word2idx[w] for w in sample_intent]

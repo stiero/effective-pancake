@@ -502,7 +502,8 @@ intent_plot = sns.countplot(df.intent)
 
 df_intent = df.loc[: ,['text', 'intent', 'entities', 'training']]
 
-
+df_train = df[df.training == True]
+df_test = df[df.training == False]
 
 len_sents = []
 
@@ -526,23 +527,107 @@ word2idx = {w: i for i, w in enumerate(words)}
 
 
 from keras.preprocessing.sequence import pad_sequences
-X = [[word2idx[w[0]] for w in sent] for sent in sent_ents_train]
+import keras.backend as K
+import multiprocessing
+import tensorflow as tf
+import numpy as np
 
-X = pad_sequences(maxlen=max_len, sequences=X, padding="post", value=n_words - 1)
+from gensim.models.word2vec import Word2Vec
 
-
-
-ent_count = {}
-
-
-for i, sent in enumerate(df.intent):
-    
-    ent_sent = []
-    
-    for dict_ in sent:
-    
-        dict_['entity']
+from keras.callbacks import EarlyStopping
+from keras.models import Sequential, Input, Model
+from keras.layers.core import Dense, Dropout, Flatten
+from keras.layers import Embedding, Bidirectional, LSTM, TimeDistributed
+from keras.layers.convolutional import Conv1D
+from keras.optimizers import Adam
 
 
 
 
+
+
+X_train_intent = [[word2idx[w[0]] for w in sent] for sent in sent_ents_train]
+
+X_train_intent = pad_sequences(maxlen=max_len, sequences=X_train_intent, 
+                               padding="post", value=n_words - 1)
+
+y_train_intent = np.zeros((len(X_train_intent), 2))
+
+
+X_test_intent = [[word2idx[w[0]] for w in sent] for sent in sent_ents_test]
+
+X_test_intent = pad_sequences(maxlen=max_len, sequences=X_test_intent, 
+                              padding="post", value=n_words - 1)
+
+y_test_intent = np.zeros((len(X_test_intent), 2))
+
+
+for i in range(len(X_train_intent)):
+    y_train_intent[i,:] = [1.0, 0.0] if df_train.iloc[i].intent == 'FindConnection' else [0.0, 1.0]
+
+for i in range(len(X_test_intent)):
+    y_test_intent[i,:] = [1.0, 0.0] if df_test.iloc[i].intent == 'FindConnection' else [0.0, 1.0]
+
+
+
+batch_size = 32
+nb_epochs = 100
+
+
+#model = Sequential()
+#
+#model.add(Conv1D(32, kernel_size=3, activation='elu', padding='same', input_shape=(max_len)))
+#
+#model.add(Conv1D(32, kernel_size=3, activation='elu', padding='same'))
+#
+#model.add(Dropout(0.25))
+#
+#model.add(Conv1D(32, kernel_size=3, activation='elu', padding='same'))
+#
+#model.add(Flatten())
+#
+#model.add(Dense(2, activation='softmax'))
+
+
+input_ = Input(shape=(max_len,))
+
+model = Embedding(input_dim=n_words, output_dim=50, input_length=max_len)(input_)
+
+model = Conv1D(32, kernel_size=10, activation='elu', padding='same')(model)
+
+model = Dropout(rate=0.3)(model)
+
+model = Conv1D(16, kernel_size=5, activation='elu', padding='same')(model)
+
+model = Bidirectional(LSTM(units=100, return_sequences=True, recurrent_dropout=0.1))(model)
+
+model = Flatten()(model)
+
+out = Dense(2, activation="softmax")(model)  # softmax output layer
+
+model = Model(input_, out)
+
+
+model.compile(loss='categorical_crossentropy',
+              optimizer=Adam(lr=0.0001, decay=1e-6),
+              metrics=['accuracy'])
+
+
+model.fit(X_train_intent, y_train_intent,
+          batch_size=batch_size,
+          shuffle=True,
+          epochs=nb_epochs,
+          validation_data=(X_test_intent, y_test_intent),
+          callbacks=[EarlyStopping(min_delta=0.00025, patience=2)],
+          verbose=0)
+
+
+pred_intent = model.predict(X_test_intent)
+
+#for i, j in zip(pred_intent, df_test.intent):
+#    print(np.argmax(i), j)
+
+pred_vals = [np.argmax(val) for val in pred_intent]
+y_vals = [np.argmax(val) for val in y_test_intent]
+
+accuracy_score(pred_vals, y_vals)
