@@ -12,7 +12,8 @@ import pandas as pd
 
 import re
 
-
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 #df = pd.read_json('ChatbotCorpus.json')
 
@@ -50,9 +51,9 @@ class DataGetter():
         self.get_sentences()
     
         for i, sent in enumerate(self.sentences):
-            self.sentences[i] = re.sub('[?.!]+', "", sent)            
+            self.sentences[i] = re.sub('[.!]+', "", sent)            
         
-        self.sentences_tokenised = list(map(lambda x: re.split(" |(-)|'|(:)|(,)", x), self.sentences))
+        self.sentences_tokenised = list(map(lambda x: re.split(" |(-)|'|(:)|(,)|(\?)", x), self.sentences))
         
         for i, sent in enumerate(self.sentences_tokenised):
             self.sentences_tokenised[i] = list(filter(None, sent))
@@ -67,7 +68,9 @@ class DataGetter():
         return self.unique_ents
 
         
-        
+    def get_unique_intents(self):
+        self.unique_intents = list(set(self.df.intent))
+        return self.unique_intents
         
     
     def get_entities(self):
@@ -111,7 +114,7 @@ entities = data.get_entities()
 
 entities_start_stop = df.entities.apply(lambda x: [(w['start'], w['stop']) for w in x])
 
-
+unique_intents = data.get_unique_intents()
 
 
 
@@ -179,17 +182,33 @@ for i, sent in enumerate(sentences):
    
 
 
+corpus = []
+
+
+for sent in df.entities:
+    #sent = sent[0]
+    
+    for dict_ in sent:
+        word = dict_['text']
+        ent = dict_['entity']
+    corpus.append((word, ent))
+    
+corpus_df = pd.DataFrame(corpus, columns=["word", "ent"])
+
+
+ent_plot = sns.countplot(corpus_df['ent'])
+plt.xticks(rotation=45)
+
+plt.figure(figsize=(40, 6));
+word_plot = sns.countplot(corpus_df['word'], order=corpus_df['word'].value_counts().index)
+plt.xticks(rotation=60);
 
 
 
 
 
-
-
-
-def word2features(sent, i):
+def word2features_train(sent, i):
     word = sent[i][0]
-    postag = sent[i][1]
 
     features = {
         'bias': 1.0,
@@ -199,8 +218,6 @@ def word2features(sent, i):
         'word.isupper()': word.isupper(),
         'word.istitle()': word.istitle(),
         'word.isdigit()': word.isdigit(),
-        'postag': postag,
-        'postag[:2]': postag[:2],
     }
     if i > 0:
         word1 = sent[i-1][0]
@@ -210,7 +227,6 @@ def word2features(sent, i):
             '-1:word.istitle()': word1.istitle(),
             '-1:word.isupper()': word1.isupper(),
             '-1:postag': postag1,
-            '-1:postag[:2]': postag1[:2],
         })
     else:
         features['BOS'] = True
@@ -223,7 +239,6 @@ def word2features(sent, i):
             '+1:word.istitle()': word1.istitle(),
             '+1:word.isupper()': word1.isupper(),
             '+1:postag': postag1,
-            '+1:postag[:2]': postag1[:2],
         })
     else:
         features['EOS'] = True
@@ -231,8 +246,50 @@ def word2features(sent, i):
     return features
 
 
-def sent2features(sent):
-    return [word2features(sent, i) for i in range(len(sent))]
+def word2features_test(sent, i):
+    
+    
+    word = sent[i][0]
+  
+
+    features = {
+        'bias': 1.0,
+        'word.lower()': word.lower(),
+        'word[-3:]': word[-3:],
+        'word[-2:]': word[-2:],
+        'word.isupper()': word.isupper(),
+        'word.istitle()': word.istitle(),
+        'word.isdigit()': word.isdigit(),
+    }
+    if i > 0:
+        word1 = sent[i-1][0]
+        features.update({
+            '-1:word.lower()': word1.lower(),
+            '-1:word.istitle()': word1.istitle(),
+            '-1:word.isupper()': word1.isupper(),
+        })
+    else:
+        features['BOS'] = True
+
+    if i < len(sent)-1:
+        word1 = sent[i+1][0]
+        features.update({
+            '+1:word.lower()': word1.lower(),
+            '+1:word.istitle()': word1.istitle(),
+            '+1:word.isupper()': word1.isupper()
+        })
+    else:
+        features['EOS'] = True
+
+    return features
+
+
+def sent2features(sent, train):
+    if train == True:
+        return [word2features_train(sent, i) for i in range(len(sent))]
+    
+    else:
+        return [word2features_test(sent, i) for i in range(len(sent))]
 
 def sent2labels(sent):
     return [label for token, label in sent]
@@ -249,18 +306,116 @@ sent_ents_train = [sent_ents[i] for i in train_index]
 sent_ents_test = [sent_ents[i] for i in test_index]
 
 
-X_train = [sent2features(s) for s in sent_ents_train]
+X_train = [sent2features(s, train=True) for s in sent_ents_train]
 y_train = [sent2labels(s) for s in sent_ents_train]
 
 
-X_test = [sent2features(s) for s in sent_ents_test]
+X_test = [sent2features(s, train=False) for s in sent_ents_test]
 y_test = [sent2labels(s) for s in sent_ents_test]
+
+
+
+
+# Random Forest
+
+from sklearn.ensemble import RandomForestClassifier
+
+from sklearn.model_selection import cross_val_predict
+
+from sklearn.preprocessing import OneHotEncoder
+
+from sklearn.metrics import accuracy_score, f1_score, classification_report
+
+
+X_train_rf = pd.DataFrame()
+
+for sent in X_train:
+    df_rows = pd.DataFrame(sent)
+    
+    X_train_rf = pd.concat([X_train_rf, df_rows])
+    
+X_train_rf.reset_index(drop=True, inplace=True)
+
+
+
+
+
+X_test_rf = pd.DataFrame()
+
+for sent in X_test:
+    df_rows = pd.DataFrame(sent)
+    
+    X_test_rf = pd.concat([X_test_rf, df_rows])
+    
+X_test_rf.reset_index(drop=True, inplace=True)
+
+
+
+y_train_rf = [label for sent in y_train for label in sent]
+
+y_test_rf = [label for sent in y_test for label in sent]
+
+
+
+for col in X_train_rf.columns:
+    if X_train_rf[col].dtype == 'object':
+        
+        X_train_rf[col] = X_train_rf[col].astype('category')
+        
+        X_test_rf[col] = X_test_rf[col].astype('category')
+        
+        col_ohe_train = pd.get_dummies(X_train_rf[col], drop_first=True, prefix=col)
+        col_ohe_test = pd.get_dummies(X_test_rf[col], drop_first=True, prefix=col)
+        
+        del X_train_rf[col]
+        del X_test_rf[col]
+        
+        X_train_rf = pd.concat([X_train_rf, col_ohe_train], axis=1)
+        
+        X_test_rf = pd.concat([X_test_rf, col_ohe_test], axis=1)
+
+
+
+
+X_train_rf, X_test_rf = X_train_rf.align(X_test_rf, join='inner', axis=1)
+
+
+
+
+
+rf = RandomForestClassifier(max_depth=20, random_state=0,
+                           n_estimators=100, oob_score=True,
+                           n_jobs=-1, verbose=0,
+                           max_features='auto')
+
+rf.fit(X_train_rf, y_train_rf)
+
+
+pred_rf = rf.predict(X_test_rf)
+
+#for i, j in zip(y_test_rf, pred_rf):
+#    print(i, j)
+
+
+print(classification_report(y_test_rf, pred_rf))
+
+accuracy_score(y_test_rf, pred_rf)
+
+f1_score(y_test_rf, pred_rf, average='weighted')
+
+#pred = cross_val_predict(RandomForestClassifier(n_estimators=200),
+#                         X=X_train_rf, y=y_train_rf, cv=5)
+
+
+
 
 
 
 from sklearn_crfsuite import CRF
 
+from sklearn_crfsuite.metrics import flat_f1_score
 
+%%time
 crf = CRF(algorithm='lbfgs',
           c1=0.1,
           c2=0.1,
@@ -269,7 +424,6 @@ crf = CRF(algorithm='lbfgs',
 
 
 
-from sklearn.model_selection import cross_val_predict
 from sklearn_crfsuite.metrics import flat_classification_report
 
 
@@ -283,6 +437,8 @@ pred = crf.predict(X_test)
 report = flat_classification_report(y_pred=pred, y_true=y_test)
 
 print(report)
+
+flat_f1_score(y_test, pred, average='weighted')
 
 
 
@@ -342,21 +498,22 @@ for i, j in zip(pred, test_index):
         
 
 
+intent_plot = sns.countplot(df.intent)
+
+df_intent = df.loc[: ,['text', 'intent', 'entities', 'training']]
 
 
+ent_count = {}
 
 
-
-
-
-
-
-
-# Intent classification
-        
-class IntentClassifier:
+for i, sent in enumerate(df.intent):
     
-    def __init__(self):
-        self.df = df
+    ent_sent = []
+    
+    for dict_ in sent:
+    
+        dict_['entity']
+
+
 
 
