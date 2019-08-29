@@ -503,6 +503,35 @@ intent_plot = sns.countplot(df.intent)
 df_intent = df.loc[: ,['text', 'intent', 'entities', 'training']]
 
 
+
+len_sents = []
+
+for sent in sentences:
+    len_sents.append(len(sent))
+
+mean_len = sum(len_sents)/len(len_sents)
+
+
+words = list(set([word for sent in sentences for word in sent]))
+
+words.append("PAD")
+
+n_words = len(words)
+
+max_len = 20
+
+word2idx = {w: i for i, w in enumerate(words)}
+
+
+
+
+from keras.preprocessing.sequence import pad_sequences
+X = [[word2idx[w[0]] for w in sent] for sent in sent_ents_train]
+
+X = pad_sequences(maxlen=max_len, sequences=X, padding="post", value=n_words - 1)
+
+
+
 ent_count = {}
 
 
