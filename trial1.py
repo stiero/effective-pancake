@@ -415,7 +415,6 @@ from sklearn_crfsuite import CRF
 
 from sklearn_crfsuite.metrics import flat_f1_score
 
-%%time
 crf = CRF(algorithm='lbfgs',
           c1=0.1,
           c2=0.1,
@@ -448,6 +447,11 @@ for i, j in zip(pred, test_index):
 #from nltk.tokenize import RegexpTokenizer
 #
 #tkr = RegexpTokenizer()
+
+
+import eli5
+
+eli5.show_weights(crf, top=30)
 
 
 
@@ -532,7 +536,6 @@ import multiprocessing
 import tensorflow as tf
 import numpy as np
 
-from gensim.models.word2vec import Word2Vec
 
 from keras.callbacks import EarlyStopping
 from keras.models import Sequential, Input, Model
@@ -593,13 +596,15 @@ input_ = Input(shape=(max_len,))
 
 model = Embedding(input_dim=n_words, output_dim=50, input_length=max_len)(input_)
 
-model = Conv1D(32, kernel_size=10, activation='elu', padding='same')(model)
+model = Conv1D(32, kernel_size=3, activation='elu', padding='same')(model)
 
 model = Dropout(rate=0.3)(model)
 
 model = Conv1D(16, kernel_size=5, activation='elu', padding='same')(model)
 
 model = Bidirectional(LSTM(units=100, return_sequences=True, recurrent_dropout=0.1))(model)
+
+model = Dense(16, activation='tanh')(model)
 
 model = Flatten()(model)
 
@@ -613,13 +618,13 @@ model.compile(loss='categorical_crossentropy',
               metrics=['accuracy'])
 
 
-model.fit(X_train_intent, y_train_intent,
-          batch_size=batch_size,
-          shuffle=True,
-          epochs=nb_epochs,
-          validation_data=(X_test_intent, y_test_intent),
-          callbacks=[EarlyStopping(min_delta=0.00025, patience=2)],
-          verbose=0)
+history = model.fit(X_train_intent, y_train_intent,
+              batch_size=batch_size,
+              shuffle=True,
+              epochs=nb_epochs,
+              validation_data=(X_test_intent, y_test_intent),
+              callbacks=[EarlyStopping(min_delta=0.00025, patience=10)],
+              verbose=0)
 
 
 pred_intent = model.predict(X_test_intent)
@@ -631,3 +636,21 @@ pred_vals = [np.argmax(val) for val in pred_intent]
 y_vals = [np.argmax(val) for val in y_test_intent]
 
 accuracy_score(pred_vals, y_vals)
+
+
+loss = history.history['loss']
+val_loss = history.history['val_loss']
+
+epochs = range(1, len(loss) + 1)
+
+plt.figure()
+plt.plot(epochs, loss, 'bo', label='Training loss')
+plt.plot(epochs, val_loss, 'b', label='Validation loss')
+plt.title('Training and validation loss')
+plt.legend()
+plt.show()
+
+
+
+
+
